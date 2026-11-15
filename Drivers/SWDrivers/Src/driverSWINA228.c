@@ -7,111 +7,143 @@
 
 #include "driverSWINA228.h"
 
-static float s_currentLsb = 0.002f; // Default 2mA/LSB
-static uint8_t s_adcRange = INA228_ADCRANGE_0_163MV;
+// Internal helper to write a 16-bit register over I2C1 or I2C2
+static void ina228WriteReg16(uint8_t i2cAddres, uint8_t i2cBus, uint8_t reg, uint16_t value) {
+    uint8_t writeData[3];
+    writeData[0] = reg;
+    writeData[1] = (uint8_t)((value >> 8) & 0xFF);
+    writeData[2] = (uint8_t)(value & 0xFF);
 
-// Low-level helpers (adapt wrapper names to match your driverHWI2C implementation)
-extern bool driverHWI2C1Write(uint8_t devAddr, uint8_t *txData, uint16_t len);
-extern bool driverHWI2C1Read(uint8_t devAddr, uint8_t regAddr, uint8_t *rxData, uint16_t len);
-
-static bool ina228WriteReg16(uint8_t addr, uint8_t reg, uint16_t val) {
-    uint8_t buf[3];
-    buf[0] = reg;
-    buf[1] = (uint8_t)((val >> 8) & 0xFF);
-    buf[2] = (uint8_t)(val & 0xFF);
-    return driverHWI2C1Write(addr, buf, 3);
-}
-
-static bool ina228ReadReg16(uint8_t addr, uint8_t reg, uint16_t *val) {
-    uint8_t buf[2] = {0};
-    if (!driverHWI2C1Read(addr, reg, buf, 2)) return false;
-    *val = ((uint16_t)buf[0] << 8) | buf[1];
-    return true;
-}
-
-// Reads a 24-bit register and sign-extends bits [23:4] as a signed 20-bit integer
-static bool ina228ReadReg24Signed20(uint8_t addr, uint8_t reg, int32_t *val) {
-    uint8_t buf[3] = {0};
-    if (!driverHWI2C1Read(addr, reg, buf, 3)) return false;
-    uint32_t raw24 = ((uint32_t)buf[0] << 16) | ((uint32_t)buf[1] << 8) | buf[2];
-    int32_t signed20 = (int32_t)(raw24 >> 4);
-    if (signed20 & 0x80000) {
-        signed20 |= 0xFFF00000; // Sign-extend 20-bit to 32-bit
+    if (i2cBus == 1) {
+        driverHWI2C1Write(i2cAddres, false, writeData, 3);
+    } else if (i2cBus == 2) {
+        driverHWI2C2Write(i2cAddres, false, writeData, 3);
     }
-    *val = signed20;
-    return true;
 }
 
-// Reads a 40-bit signed two's complement register (CHARGE)
-static bool ina228ReadReg40Signed(uint8_t addr, uint8_t reg, int64_t *val) {
-    uint8_t buf[5] = {0};
-    if (!driverHWI2C1Read(addr, reg, buf, 5)) return false;
-    uint64_t raw40 = ((uint64_t)buf[0] << 32) |
-                     ((uint64_t)buf[1] << 24) |
-                     ((uint64_t)buf[2] << 16) |
-                     ((uint64_t)buf[3] << 8)  |
-                     ((uint64_t)buf[4]);
+// Internal helper to read N bytes from a register over I2C1 or I2C2
+static void ina228ReadRegN(uint8_t i2cAddres, uint8_t i2cBus, uint8_t reg, uint8_t *readBuf, uint8_t len) {
+    uint8_t writeReg[1] = {reg};
+
+    if (i2cBus == 1) {
+        driverHWI2C1Write(i2cAddres, false, writeReg, 1);
+        driverHWI2C1Read(i2cAddres, readBuf, len);
+    } else if (i2cBus == 2) {
+        driverHWI2C2Write(i2cAddres, false, writeReg, 1);
+        driverHWI2C2Read(i2cAddres, readBuf, len);
+    }
+}
+
+void driverSWINA228Init(uint8_t i2cAddres, uint8_t i2cBus, driverSWINA228InitStruct initStruct) {
+    if (i2cBus == 1) {
+        driverHWI2C1Init();
+    } else if (i2cBus == 2) {
+        driverHWI2C2Init();
+    }
+
+    // 1. Build CONFIG register (0x00):
+    // Bit 14 = RSTACC (clear charge/energy accumulators on init)
+    // Bit 4  = ADCRANGE (0 = +/-163.84mV, 1 = +/-40.96mV)
+    uint16_t configReg = (1U << 14) | (((uint16_t)initStruct.adcRange & 0x01U) << 4);
+    ina228WriteReg16(i2cAddres, i2cBus, INA228_REG_CONFIG, configReg);
+
+    // 2. Build ADC_CONFIG register (0x01):
+    // If initStruct.mode is 0 (uninitialized struct), default to Continuous All (0xF), 540us, 64x avg (0xFB6B)
+    uint16_t adcConfigReg;
+    if (initStruct.mode == 0) {
+        adcConfigReg = (INA228_MODE_ALL_CONTINUOUS << 12) |
+                       (CT_540US << 9) |
+                       (CT_540US << 6) |
+                       (CT_540US << 3) |
+                       AVG_64;
+    } else {
+        adcConfigReg = (((uint16_t)initStruct.mode & 0x0FU) << 12) |
+                       (((uint16_t)initStruct.busConvTime & 0x07U) << 9) |
+                       (((uint16_t)initStruct.shuntConvTime & 0x07U) << 6) |
+                       (((uint16_t)initStruct.tempConvTime & 0x07U) << 3) |
+                       ((uint16_t)initStruct.averaging & 0x07U);
+    }
+    ina228WriteReg16(i2cAddres, i2cBus, INA228_REG_ADC_CONFIG, adcConfigReg);
+
+    // 3. Write SHUNT_CAL (0x02) so hardware CURRENT, POWER, ENERGY, and CHARGE registers work:
+    // Default to 2621 (0x0A3D) for R29 = 100uOhm and CURRENT_LSB = 2mA/LSB if shuntCal == 0
+    uint16_t shuntCal = (initStruct.shuntCal != 0) ? initStruct.shuntCal : 2621U;
+    ina228WriteReg16(i2cAddres, i2cBus, INA228_REG_SHUNT_CAL, shuntCal);
+}
+
+bool driverSWINA228GetBusCurrent(uint8_t i2cAddres, uint8_t i2cBus, float *busCurrent, int32_t offset, float scalar) {
+    uint8_t readDataC[3] = {0, 0, 0};
+    int32_t shuntRaw20;
+
+    // INA228 VSHUNT (0x04) is a 24-bit register (3 bytes); bits [23:4] hold the 20-bit signed value
+    ina228ReadRegN(i2cAddres, i2cBus, INA228_REG_VSHUNT, readDataC, 3);
+
+    uint32_t raw24 = ((uint32_t)readDataC[0] << 16) |
+                     ((uint32_t)readDataC[1] << 8)  |
+                     ((uint32_t)readDataC[2]);
+
+    // Shift right by 4 and sign-extend 20-bit two's complement to 32-bit int32_t
+    shuntRaw20 = (int32_t)(raw24 >> 4);
+    if (shuntRaw20 & 0x00080000) {
+        shuntRaw20 |= 0xFFF00000;
+    }
+
+    *busCurrent = scalar * (float)(shuntRaw20 + offset);
+    return false;
+}
+
+bool driverSWINA228GetBusVoltage(uint8_t i2cAddres, uint8_t i2cBus, float *busVoltage, float scalar) {
+    uint8_t readDataV[3] = {0, 0, 0};
+    int32_t busVoltageRaw20;
+
+    // INA228 VBUS (0x05) is a 24-bit register (3 bytes); bits [23:4] hold the 20-bit signed value
+    ina228ReadRegN(i2cAddres, i2cBus, INA228_REG_VBUS, readDataV, 3);
+
+    uint32_t raw24 = ((uint32_t)readDataV[0] << 16) |
+                     ((uint32_t)readDataV[1] << 8)  |
+                     ((uint32_t)readDataV[2]);
+
+    busVoltageRaw20 = (int32_t)(raw24 >> 4);
+    if (busVoltageRaw20 & 0x00080000) {
+        busVoltageRaw20 |= 0xFFF00000;
+    }
+
+    *busVoltage = scalar * (float)busVoltageRaw20;
+    return false;
+}
+
+bool driverSWINA228GetDieTemp(uint8_t i2cAddres, uint8_t i2cBus, float *dieTempC) {
+    uint8_t readDataT[2] = {0, 0};
+    ina228ReadRegN(i2cAddres, i2cBus, INA228_REG_DIETEMP, readDataT, 2);
+
+    int16_t rawTemp = (int16_t)(((uint16_t)readDataT[0] << 8) | readDataT[1]);
+    *dieTempC = (float)rawTemp * 0.0078125f; // 7.8125 mC/LSB
+    return false;
+}
+
+bool driverSWINA228GetChargeCoulombs(uint8_t i2cAddres, uint8_t i2cBus, double *coulombs, float currentLsb) {
+    uint8_t readDataQ[5] = {0, 0, 0, 0, 0};
+    ina228ReadRegN(i2cAddres, i2cBus, INA228_REG_CHARGE, readDataQ, 5);
+
+    uint64_t raw40 = ((uint64_t)readDataQ[0] << 32) |
+                     ((uint64_t)readDataQ[1] << 24) |
+                     ((uint64_t)readDataQ[2] << 16) |
+                     ((uint64_t)readDataQ[3] << 8)  |
+                     ((uint64_t)readDataQ[4]);
+
     if (raw40 & 0x8000000000ULL) {
         raw40 |= 0xFFFFFF0000000000ULL; // Sign-extend 40-bit to 64-bit
     }
-    *val = (int64_t)raw40;
-    return true;
+
+    int64_t signedCharge = (int64_t)raw40;
+    *coulombs = (double)signedCharge * (16.0 * (double)currentLsb);
+    return false;
 }
 
-bool driverSWINA228Init(uint8_t i2cAddr, float rShuntOhms, float maxExpectedCurrentAmps, uint8_t adcRange) {
-    uint16_t mfgId = 0;
-    if (!ina228ReadReg16(i2cAddr, INA228_REG_MANUFACTURER_ID, &mfgId) || mfgId != 0x5449) {
-        return false; // Verify TI Manufacturer ID ("TI" = 0x5449)
-    }
-
-    s_adcRange = (adcRange == INA228_ADCRANGE_1_40MV) ? 1 : 0;
-
-    // 1. CONFIG (0x00): Reset accumulators (Bit 14 = RSTACC), set ADCRANGE (Bit 4)
-    uint16_t config = (1U << 14) | ((uint16_t)s_adcRange << 4);
-    if (!ina228WriteReg16(i2cAddr, INA228_REG_CONFIG, config)) return false;
-
-    // 2. ADC_CONFIG (0x01):
-    // MODE[15:12] = 0xB (Continuous Shunt + Bus) or 0xF (Continuous Shunt + Bus + Temp)
-    // VBUSCT[11:9] = 0x4 (540us), VSHCT[8:6] = 0x4 (540us), VTCT[5:3] = 0x4 (540us), AVG[2:0] = 0x3 (64 samples)
-    uint16_t adcConfig = (0xFU << 12) | (0x4U << 9) | (0x4U << 6) | (0x4U << 3) | 0x3U;
-    if (!ina228WriteReg16(i2cAddr, INA228_REG_ADC_CONFIG, adcConfig)) return false;
-
-    // 3. Calculate CURRENT_LSB = MaxCurrent / 2^19 (524288)
-    s_currentLsb = maxExpectedCurrentAmps / 524288.0f;
-
-    // 4. Calculate SHUNT_CAL = 13107.2 * 10^6 * CURRENT_LSB * R_SHUNT * (4 if ADCRANGE=1)
-    float calFloat = 13107200000.0f * s_currentLsb * rShuntOhms;
-    if (s_adcRange == INA228_ADCRANGE_1_40MV) {
-        calFloat *= 4.0f;
-    }
-    uint16_t shuntCal = (uint16_t)calFloat;
-    return ina228WriteReg16(i2cAddr, INA228_REG_SHUNT_CAL, shuntCal);
-}
-
-bool driverSWINA228ResetAccumulators(uint8_t i2cAddr) {
-    uint16_t config = (1U << 14) | ((uint16_t)s_adcRange << 4);
-    return ina228WriteReg16(i2cAddr, INA228_REG_CONFIG, config);
-}
-
-bool driverSWINA228GetBusVoltage(uint8_t i2cAddr, float *voltageVolts, float busDividerRatio) {
-    int32_t rawVbus = 0;
-    if (!ina228ReadReg24Signed20(i2cAddr, INA228_REG_VBUS, &rawVbus)) return false;
-    *voltageVolts = (float)rawVbus * INA228_VBUS_LSB * busDividerRatio;
-    return true;
-}
-
-bool driverSWINA228GetCurrent(uint8_t i2cAddr, float *currentAmps) {
-    int32_t rawCurrent = 0;
-    if (!ina228ReadReg24Signed20(i2cAddr, INA228_REG_CURRENT, &rawCurrent)) return false;
-    *currentAmps = (float)rawCurrent * s_currentLsb;
-    return true;
-}
-
-bool driverSWINA228GetChargeAh(uint8_t i2cAddr, double *ampHours) {
-    int64_t rawCharge = 0;
-    if (!ina228ReadReg40Signed(i2cAddr, INA228_REG_CHARGE, &rawCharge)) return false;
-    // CHARGE LSB = 16 * CURRENT_LSB (in Coulombs / Amp-seconds)
-    double coulombs = (double)rawCharge * (16.0 * (double)s_currentLsb);
-    *ampHours = coulombs / 3600.0;
-    return true;
+bool driverSWINA228ResetAccumulators(uint8_t i2cAddres, uint8_t i2cBus) {
+    uint8_t readCfg[2] = {0, 0};
+    ina228ReadRegN(i2cAddres, i2cBus, INA228_REG_CONFIG, readCfg, 2);
+    uint16_t cfg = (((uint16_t)readCfg[0] << 8) | readCfg[1]) | (1U << 14);
+    ina228WriteReg16(i2cAddres, i2cBus, INA228_REG_CONFIG, cfg);
+    return false;
 }

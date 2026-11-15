@@ -1,7 +1,7 @@
 #ifndef __MODPOWERELECTRONICS_H
 #define __MODPOWERELECTRONICS_H
 
-#include "driverSWISL28022.h"
+#include "driverSWINA228.h"
 #include "driverHWADC.h"
 #include "driverSWLTC6803.h"
 #include "driverHWSwitches.h"

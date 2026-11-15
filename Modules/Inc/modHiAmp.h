@@ -6,7 +6,7 @@
 #include "modPowerElectronics.h"
 #include "modConfig.h"
 #include "driverHWI2C1.h"
-#include "driverSWISL28022.h"
+#include "driverSWINA228.h"
 #include "driverSWDCDC.h"
 #include "driverSWPCAL6416.h"
 #include "driverSWADC128D818.h"
