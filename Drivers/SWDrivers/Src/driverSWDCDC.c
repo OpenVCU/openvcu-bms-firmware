@@ -7,12 +7,12 @@ modPowerElectricsPackStateTypedef *driverSWDCDCPackStateHandle;
 void driverSWDCDCInit(modPowerElectricsPackStateTypedef* packStateHandle){
 	driverSWDCDCPackStateHandle = packStateHandle;
 	
-	driverSWISL28022InitStruct ISLInitStruct;
+    driverSWINA228InitStruct INAInitStruct = {0};
 	ISLInitStruct.ADCSetting = ADC_128_64010US;																														// Init the bus voltage and current monitors. (AUX)
 	ISLInitStruct.busVoltageRange = BRNG_60V_1;
 	ISLInitStruct.currentShuntGain = PGA_4_160MV;
 	ISLInitStruct.Mode = MODE_SHUNTANDBUS_CONTINIOUS;
-	driverSWISL28022Init(ISL28022_SHIELD_AUX_ADDRES,ISL28022_SHIELD_AUX_BUS,ISLInitStruct);
+    driverSWINA228Init(INA228_SHIELD_AUX_ADDRES, INA228_SHIELD_AUX_BUS, INAInitStruct);
 	
   // GPIO Init here
   GPIO_InitTypeDef GPIO_InitStruct;
@@ -51,13 +51,13 @@ void driverSWDCDCEnableTask(void){
 
 float driverSWDCDCGetAuxVoltage(void) {
 	float auxVoltage = 0.0f;
-	driverSWISL28022GetBusVoltage(ISL28022_SHIELD_AUX_ADDRES,ISL28022_SHIELD_AUX_BUS,&auxVoltage,0.004f);
+    driverSWINA228GetBusVoltage(INA228_SHIELD_AUX_ADDRES, INA228_SHIELD_AUX_BUS, &auxVoltage, INA228_VBUS_SCALAR);
 	return auxVoltage;
 };
 
 float driverSWDCDCGetAuxCurrent(void) {
 	float auxCurrent = 0.0f;
-	driverSWISL28022GetBusCurrent(ISL28022_SHIELD_AUX_ADDRES,ISL28022_SHIELD_AUX_BUS,&auxCurrent,0,0.000489f);
+    driverSWINA228GetBusCurrent(INA228_SHIELD_AUX_ADDRES, INA228_SHIELD_AUX_BUS, &auxCurrent, 0, INA228_DEFAULT_CURR_SCALAR);
 	return auxCurrent;
 };
 

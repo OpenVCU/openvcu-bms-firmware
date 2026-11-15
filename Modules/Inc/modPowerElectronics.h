@@ -3,7 +3,7 @@
 
 #include "driverSWINA228.h"
 #include "driverHWADC.h"
-#include "driverSWLTC6803.h"
+#include "driverSWLTC681x.h"
 #include "driverHWSwitches.h"
 #include "driverSWEMC2305.h"
 #include "modDelay.h"
@@ -77,7 +77,7 @@ typedef struct {
 	uint8_t  powerButtonActuated;
 	uint8_t  packInSOA;
 	uint8_t  watchDogTime;
-	driverLTC6803CellsTypedef cellVoltagesIndividual[NoOfCellsPossibleOnChip];
+    driverLTC681xCellsTypedef cellVoltagesIndividual[NoOfCellsPossibleOnChip];
 	modPowerElectronicsPackOperationalCellStatesTypedef packOperationalCellState;
 	
 	// Slave BMS
@@ -117,7 +117,7 @@ void modPowerElectronicsCalculateCellStats(void);
 void modPowerElectronicsSubTaskBalaning(void);
 void modPowerElectronicsSubTaskVoltageWatch(void);
 void modPowerElectronicsUpdateSwitches(void);
-void modPowerElectronicsSortCells(driverLTC6803CellsTypedef *cells, uint8_t cellCount);
+void modPowerElectronicsSortCells(driverLTC681xCellsTypedef *cells, uint8_t cellCount);
 void modPowerElectronicsCalcTempStats(void);
 void modPowerElectronicsCalcThrottle(void);
 int32_t modPowerElectronicsMapVariableInt(int32_t inputVariable, int32_t inputLowerLimit, int32_t inputUpperLimit, int32_t outputLowerLimit, int32_t outputUpperLimit);

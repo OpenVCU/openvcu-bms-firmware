@@ -101,19 +101,5 @@ float driverSWLTC681xConvertTemperatureInt(uint16_t inputValue);
 // Backward-compatible aliases so modPowerElectronics.c compiles cleanly during migration
 typedef driverLTC681xCellsTypedef        driverLTC6803CellsTypedef;
 typedef driverLTC681xConfigStructTypedef driverLTC6803ConfigStructTypedef;
-#define LTC6803StartCellVoltageADCConversionAll driverSWLTC681x_ADCV_DEFAULT
-#define driverSWLTC681x_ADCV_DEFAULT            LTC681X_CMD_ADCV_NORM_ALL
-#define driverSWLTC6803Init                     driverSWLTC681xInit
-#define driverSWLTC6803ReInit                   driverSWLTC681xReInit
-#define driverSWLTC6803StartCellVoltageConversion        driverSWLTC681xStartCellVoltageConversion
-#define driverSWLTC6803StartTemperatureVoltageConversion driverSWLTC681xStartTemperatureVoltageConversion
-#define driverSWLTC6803ResetCellVoltageRegisters         driverSWLTC681xResetCellVoltageRegisters
-#define driverSWLTC6803ReadCellVoltages         driverSWLTC681xReadCellVoltages
-#define driverSWLTC6803ReadTempVoltages         driverSWLTC681xReadTempVoltages
-#define driverSWLTC6803ReadConfig               driverSWLTC681xReadConfig
-#define driverSWLTC6803ReadVoltageFlags         driverSWLTC681xReadVoltageFlags
-#define driverSWLTC6803EnableBalanceResistors   driverSWLTC681xEnableBalanceResistors
-#define driverSWLTC6803ConvertTemperatureExt    driverSWLTC681xConvertTemperatureExt
-#define driverSWLTC6803ConvertTemperatureInt    driverSWLTC681xConvertTemperatureInt
 
 #endif /* !__DRIVERSWLTC681X_H */

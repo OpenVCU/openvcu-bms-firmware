@@ -21,6 +21,16 @@
 #define INA228_SHIELD_AUX_ADDRES    0x45
 #define INA228_SHIELD_AUX_BUS       1
 
+// Voltage & Current Conversion Scalars (Centralized for easy tuning)
+#define INA228_VBUS_LSB             0.0001953125f   // 195.3125 uV per LSB
+#define INA228_VBUS_DIVIDER_RATIO   1.0f            // Set >1.0f if external voltage divider is used on VBUS
+#define INA228_VBUS_SCALAR          (INA228_VBUS_LSB * INA228_VBUS_DIVIDER_RATIO)
+
+// Optional default shunt current scalar for R29 = 100 uOhm (0.0001 Ohm) at ADCRANGE = 0 (312.5 nV/LSB)
+#define INA228_VSHUNT_LSB_163MV     0.0000003125f
+#define INA228_RSHUNT_OHMS          0.0001f
+#define INA228_DEFAULT_CURR_SCALAR  (INA228_VSHUNT_LSB_163MV / INA228_RSHUNT_OHMS) // 0.003125 A/LSB
+
 // INA228 CONFIG (0x00) ADCRANGE Bit [4]
 typedef enum {
     ADCRANGE_163MV = 0,     // +/- 163.84mV full scale (312.5 nV/LSB) -> +/- 1638.4A on 100uOhm

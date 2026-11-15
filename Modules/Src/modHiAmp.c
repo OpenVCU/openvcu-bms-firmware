@@ -123,23 +123,23 @@ void modHiAmpShieldResetVariables(void) {
 }
 
 void modHiAmpShieldMainShuntMonitorInit(void) {
-	driverSWISL28022InitStruct ISLInitStruct;					 																								    // Init the bus voltage and current monitor. (MAIN)
-	ISLInitStruct.ADCSetting = ADC_128_64010US;
-	ISLInitStruct.busVoltageRange = BRNG_60V_1;
-	ISLInitStruct.currentShuntGain = PGA_4_160MV;
-	ISLInitStruct.Mode = MODE_SHUNTANDBUS_CONTINIOUS;
-	driverSWISL28022Init(ISL28022_SHIELD_MAIN_ADDRES,ISL28022_SHIELD_MAIN_BUS,ISLInitStruct);
+    driverSWINA228InitStruct INAInitStruct = {0}; // Init the bus voltage and current monitor. (MAIN)
+    INAInitStruct.ADCSetting = ADC_128_64010US;
+    INAInitStruct.busVoltageRange = BRNG_60V_1;
+    INAInitStruct.currentShuntGain = PGA_4_160MV;
+    INAInitStruct.Mode = MODE_SHUNTANDBUS_CONTINIOUS;
+    driverSWINA228Init(INA228_SHIELD_MAIN_ADDRES, INA228_SHIELD_MAIN_BUS, INAInitStruct);
 }
 
 float modHiAmpShieldShuntMonitorGetVoltage(void) {
   float measuredVoltage;
-	driverSWISL28022GetBusVoltage(ISL28022_SHIELD_MAIN_ADDRES,ISL28022_SHIELD_MAIN_BUS,&measuredVoltage,0.004f);
+    driverSWINA228GetBusVoltage(INA228_SHIELD_MAIN_ADDRES, INA228_SHIELD_MAIN_BUS, &measuredVoltage, INA228_VBUS_SCALAR);
 	return measuredVoltage;
 }
 
 float modHiAmpShieldShuntMonitorGetCurrent(void) {
   float measuredCurrent;
-	driverSWISL28022GetBusCurrent(ISL28022_SHIELD_MAIN_ADDRES,ISL28022_SHIELD_MAIN_BUS,&measuredCurrent,modHiAmpGeneralConfigHandle->shuntHCOffset,modHiAmpGeneralConfigHandle->shuntHCFactor);
+    driverSWINA228GetBusCurrent(INA228_SHIELD_MAIN_ADDRES, INA228_SHIELD_MAIN_BUS, &measuredCurrent, modHiAmpGeneralConfigHandle->shuntHCOffset, modHiAmpGeneralConfigHandle->shuntHCFactor);
 	return measuredCurrent;
 }
 
