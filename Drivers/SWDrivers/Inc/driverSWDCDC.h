@@ -1,6 +1,7 @@
 #include "stm32f3xx_hal.h"
 #include "stdbool.h"
 #include "modPowerElectronics.h"
+#include "driverSWINA228.h"
 
 void driverSWDCDCInit(modPowerElectricsPackStateTypedef* packStateHandle);
 void driverSWDCDCSetEnabledState(bool newEnabledState);
